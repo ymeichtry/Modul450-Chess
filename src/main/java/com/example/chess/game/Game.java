@@ -133,16 +133,16 @@ public class Game {
 
         applyMove(board, move, piece);
         
-        // Clear draw offer after move
-        drawOffered = false;
-        drawOfferedBy = null;
-        
         // Switch clock
         if (clock != null) {
             clock.switchClock();
         }
         
         activeColor = activeColor.opposite();
+        
+        // Note: Draw offer persists until explicitly accepted/declined
+        // The clock was already switched above, so if it was paused for a draw offer,
+        // it will remain paused until the draw is accepted/declined
         
         // Check for check, checkmate, or stalemate
         boolean check = isInCheck(board, activeColor);
@@ -233,6 +233,55 @@ public class Game {
                 applyMove(simulated, move, piece);
                 if (!isInCheck(simulated, color)) {
                     return true;
+                }
+            }
+        }
+        // Also check for castling moves
+        Optional<Position> kingPosOpt = findKing(board, color);
+        if (kingPosOpt.isPresent()) {
+            Position kingPos = kingPosOpt.get();
+            Optional<Piece> kingOpt = board.get(kingPos);
+            if (kingOpt.isPresent() && !kingOpt.get().hasMoved()) {
+                // Check if castling is possible
+                int homeRow = color == Color.WHITE ? 1 : Position.BOARD_SIZE;
+                Position loverPos = new Position(homeRow, 1);
+                Position rookPos = new Position(homeRow, 2);
+                Optional<Piece> loverOpt = board.get(loverPos);
+                Optional<Piece> rookOpt = board.get(rookPos);
+                
+                if (loverOpt.isPresent() && loverOpt.get().type() == PieceType.LOVER 
+                        && loverOpt.get().color() == color && !loverOpt.get().hasMoved()
+                        && rookOpt.isPresent() && rookOpt.get().type() == PieceType.ROOK 
+                        && rookOpt.get().color() == color && !rookOpt.get().hasMoved()
+                        && kingPos.col() == 6) { // King at F
+                    // Check if castling path is clear and safe
+                    if (!isInCheck(board, color)) {
+                        boolean pathClear = true;
+                        for (int col = 3; col < kingPos.col(); col++) {
+                            Position pos = new Position(homeRow, col);
+                            if (board.get(pos).isPresent()) {
+                                pathClear = false;
+                                break;
+                            }
+                        }
+                        if (pathClear) {
+                            // Check if king doesn't pass through check
+                            boolean safe = true;
+                            for (int col = kingPos.col() - 1; col >= kingPos.col() - 2; col--) {
+                                Position intermediate = new Position(homeRow, col);
+                                Board simulated = board.copy();
+                                simulated.set(kingPos, null);
+                                simulated.set(intermediate, kingOpt.get().withMoved());
+                                if (isInCheck(simulated, color)) {
+                                    safe = false;
+                                    break;
+                                }
+                            }
+                            if (safe) {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -338,16 +387,16 @@ public class Game {
         board.set(kingDest, king.withMoved());
         board.set(rookDest, rookOpt.get().withMoved());
         
-        // Clear draw offer after move
-        drawOffered = false;
-        drawOfferedBy = null;
-        
         // Switch clock
         if (clock != null) {
             clock.switchClock();
         }
         
         activeColor = activeColor.opposite();
+        
+        // Note: Draw offer persists until explicitly accepted/declined
+        // The clock was already switched above, so if it was paused for a draw offer,
+        // it will remain paused until the draw is accepted/declined
         
         // Check for check/checkmate
         boolean check = isInCheck(board, activeColor);
@@ -519,16 +568,113 @@ public class Game {
                     continue;
                 }
                 Piece attacker = pieceOpt.get();
-                if (attacker.color() != opponent || attacker.type() == PieceType.LOVER) {
+                // Only check opponent pieces, and LOVER never gives check
+                if (attacker.color() != opponent) {
+                    continue;
+                }
+                if (attacker.type() == PieceType.LOVER) {
                     continue; // lover does not give check
                 }
                 Move potential = new Move(pos, kingPos);
-                if (isLegalMoveIgnoringCheck(candidate, potential, attacker)) {
+                // Check if the path is clear, ignoring LOVER pieces (they don't block attacks)
+                if (isLegalMoveIgnoringCheckIgnoringLovers(candidate, potential, attacker)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+    
+    /**
+     * Checks if a move is legal, ignoring check and ignoring LOVER pieces in the path.
+     * Used for check detection where LOVER pieces don't block attacks.
+     */
+    private boolean isLegalMoveIgnoringCheckIgnoringLovers(Board currentBoard, Move move, Piece piece) {
+        if (move.from().equals(move.to())) {
+            return false;
+        }
+        Optional<Piece> dest = currentBoard.get(move.to());
+        if (dest.isPresent() && dest.get().color() == piece.color()) {
+            return false;
+        }
+        int rowDelta = move.to().row() - move.from().row();
+        int colDelta = move.to().col() - move.from().col();
+
+        // Check move pattern (but use pathClearIgnoringLovers for path checking)
+        boolean patternValid = switch (piece.type()) {
+            case KING -> {
+                if (Math.abs(rowDelta) > 1 || Math.abs(colDelta) > 1) {
+                    yield false;
+                }
+                if (rowDelta == 0 && colDelta == 0) {
+                    yield false;
+                }
+                yield pathClearIgnoringLovers(currentBoard, move, 1);
+            }
+            case LOVER -> {
+                if (Math.abs(rowDelta) > 1 || Math.abs(colDelta) > 1) {
+                    yield false;
+                }
+                if (rowDelta == 0 && colDelta == 0) {
+                    yield false;
+                }
+                yield pathClearIgnoringLovers(currentBoard, move, 1);
+            }
+            case QUEEN -> {
+                boolean diagonal = Math.abs(rowDelta) == Math.abs(colDelta) && rowDelta != 0;
+                boolean straight = rowDelta == 0 || colDelta == 0;
+                if (!diagonal && !straight) {
+                    yield false;
+                }
+                yield pathClearIgnoringLovers(currentBoard, move, 10);
+            }
+            case ROOK -> {
+                boolean sameRow = rowDelta == 0 && colDelta != 0;
+                boolean sameCol = colDelta == 0 && rowDelta != 0;
+                if (!sameRow && !sameCol) {
+                    yield false;
+                }
+                yield pathClearIgnoringLovers(currentBoard, move, Position.BOARD_SIZE);
+            }
+            case BISHOP -> {
+                if (Math.abs(rowDelta) != Math.abs(colDelta)) {
+                    yield false;
+                }
+                yield pathClearIgnoringLovers(currentBoard, move, 6);
+            }
+            case KNIGHT -> {
+                int absR = Math.abs(rowDelta);
+                int absC = Math.abs(colDelta);
+                yield (absR == 3 && absC == 1) || (absR == 1 && absC == 3);
+            }
+            case PAWN -> pawnMove(piece, currentBoard, move, rowDelta, colDelta);
+        };
+        
+        return patternValid;
+    }
+    
+    private boolean pathClearIgnoringLovers(Board board, Move move, int maxDistance) {
+        int rowDelta = move.to().row() - move.from().row();
+        int colDelta = move.to().col() - move.from().col();
+        int stepRow = Integer.compare(rowDelta, 0);
+        int stepCol = Integer.compare(colDelta, 0);
+        int distance = Math.max(Math.abs(rowDelta), Math.abs(colDelta));
+        if (distance > maxDistance) {
+            return false;
+        }
+        Position current = move.from();
+        for (int i = 1; i < distance; i++) {
+            current = current.offset(stepRow, stepCol);
+            if (current == null) {
+                return false;
+            }
+            Optional<Piece> piece = board.get(current);
+            // Ignore LOVER pieces - they don't block attacks
+            if (piece.isPresent() && piece.get().type() != PieceType.LOVER) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Optional<Position> findKing(Board b, Color color) {

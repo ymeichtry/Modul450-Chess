@@ -47,7 +47,8 @@ public class Board {
                 PieceType.ROOK
         );
         for (int col = 1; col <= Position.BOARD_SIZE; col++) {
-            board.set(new Position(homeRow, col), new Piece(backRank.get(col - 1), color, false));
+            int pieceIndex = color == Color.WHITE ? col - 1 : Position.BOARD_SIZE - col;
+            board.set(new Position(homeRow, col), new Piece(backRank.get(pieceIndex), color, false));
             board.set(new Position(pawnRow, col), new Piece(PieceType.PAWN, color, false));
         }
     }
