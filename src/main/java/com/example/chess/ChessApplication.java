@@ -5,19 +5,23 @@ import com.example.chess.game.MoveResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
 
 import java.time.Duration;
 import java.util.Scanner;
 
 @SpringBootApplication
-public class ChessApplication implements CommandLineRunner {
+public class ChessApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ChessApplication.class, args);
     }
 
-    @Override
-    public void run(String... args) {
+    @Bean
+    @Profile("!test")
+    public CommandLineRunner commandLineRunner() {
+        return args -> {
         Game game = new Game();
         try (Scanner scanner = new Scanner(System.in)) {
             System.out.println("╔══════════════════════════════════════════════╗");
@@ -113,9 +117,10 @@ public class ChessApplication implements CommandLineRunner {
             }
             System.out.println("═══════════════════════════════════");
         }
+        };
     }
     
-    private void printHelp() {
+    private static void printHelp() {
         System.out.println();
         System.out.println("MOVE NOTATION:");
         System.out.println("  Use algebraic notation: FROM TO");
