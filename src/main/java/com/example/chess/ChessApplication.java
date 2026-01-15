@@ -14,6 +14,7 @@ import java.util.Scanner;
 @SpringBootApplication
 public class ChessApplication {
 
+    //test change for test commit
     public static void main(String[] args) {
         SpringApplication.run(ChessApplication.class, args);
     }
@@ -21,7 +22,13 @@ public class ChessApplication {
     @Bean
     @Profile("!test")
     public CommandLineRunner commandLineRunner() {
-        return args -> {
+        return this::runGame;
+    }
+
+    /**
+     * Runs the chess game loop. Extracted for testability.
+     */
+    public void runGame(String... args) throws Exception {
         Game game = new Game();
         try (Scanner scanner = new Scanner(System.in)) {
             System.out.println("╔══════════════════════════════════════════════╗");
@@ -117,7 +124,6 @@ public class ChessApplication {
             }
             System.out.println("═══════════════════════════════════");
         }
-        };
     }
     
     private static void printHelp() {

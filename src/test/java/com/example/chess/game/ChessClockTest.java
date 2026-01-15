@@ -103,4 +103,21 @@ class ChessClockTest {
         String output = clock.toString();
         assertThat(output).contains("WHITE");
     }
+
+    @Test
+    void resumeDoesNothingWhenNotPaused() {
+        clock.start(Color.WHITE);
+        assertThat(clock.isPaused()).isFalse();
+        
+        clock.resume(); // Should not throw or change state
+        
+        assertThat(clock.isPaused()).isFalse();
+    }
+
+    @Test
+    void toStringShowsBlackWhenBlackIsRunning() {
+        clock.start(Color.BLACK);
+        String output = clock.toString();
+        assertThat(output).contains("BLACK");
+    }
 }
